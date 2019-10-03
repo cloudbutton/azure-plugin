@@ -10,8 +10,16 @@ RUNTIME_TIMEOUT_MAX = 600000    # Platform maximum
 RUNTIME_TIMEOUT_MIN  = 300000   # Platform minimum
 RUNTIME_MEMORY_DEFAULT = 256  # Default memory: 256 MB
 
+EXTRACT_TRIGGER_QUEUE_NAME = "pywren-queue-extractingmodules-trigger"
+EXTRACT_RESULT_QUEUE_NAME = "pywren-queue-extractingmodules-result"
 
 def load_config(config_data=None):
+    this_version_str = version_str(sys.version_info)
+    if this_version_str != '3.6':
+        raise Exception('The functions backend Azure Function Apps currently'
+                        ' only supports Python version 3.6.X and the local Python'
+                        'version is {}'.format(this_version_str))
+
     if 'runtime_memory' not in config_data['pywren']:
         config_data['pywren']['runtime_memory'] = RUNTIME_MEMORY_DEFAULT
     if 'runtime_timeout' not in config_data['pywren']:
@@ -33,7 +41,7 @@ def load_config(config_data=None):
     if 'azure_fa' not in config_data:
         raise Exception("azure_fa section is mandatory in the configuration")
 
-    required_parameters = ('resource_group', 'service_plan', 'account_name', 'docker_username')
+    required_parameters = ('resource_group', 'service_plan', 'account_name', 'account_key', 'docker_username')
 
     if set(required_parameters) > set(config_data['azure_fa']):
         raise Exception('You must provide {} to access to Azure Function App '\

@@ -5,12 +5,15 @@ import shutil
 import tempfile
 import hashlib
 import time
+import json
+import subprocess as sp
 from . import config as azure_fa_config
 from pywren_ibm_cloud.utils import version_str
 from pywren_ibm_cloud.version import __version__
 from pywren_ibm_cloud.libs.azure.functionapps_client import FunctionAppClient
+from azure.storage.queue import QueueService
+from azure.storage.queue.models import QueueMessageFormat
 import pywren_ibm_cloud
-import azure.functions as func
 
 logger = logging.getLogger(__name__)
 
@@ -20,14 +23,19 @@ class AzureFunctionAppBackend:
     A wrap-up around Azure Function Apps backend.
     """
 
-    def __init__(self, azure_fa_config):
+    def __init__(self, config):
         self.log_level = os.getenv('CB_LOG_LEVEL')
         self.name = 'azure_fa'
-        self.azure_fa_config = azure_fa_config
+        self.azure_fa_config = config
         self.version = 'pywren_v'+__version__
         self.fa_client = FunctionAppClient(self.azure_fa_config)
+        self.queue_service = QueueService(account_name=self.azure_fa_config['account_name'],
+                                          account_key=self.azure_fa_config['account_key'])
+        self.queue_service.encode_function = QueueMessageFormat.text_base64encode
+        self.queue_service.decode_function = QueueMessageFormat.text_base64decode
 
-        log_msg = 'PyWren v{} init for Azure Function Apps'
+
+        log_msg = 'PyWren v{} init for Azure Function Apps'.format(__version__)
         logger.info(log_msg)
         if not self.log_level:
             print(log_msg)
@@ -47,12 +55,6 @@ class AzureFunctionAppBackend:
         
         return runtime_name[:16] + tag
 
-    def _unformat_action_name(self, action_name):
-        runtime_name, memory = action_name.rsplit('_', 1)
-        image_name = runtime_name.replace('_', '/', 1)
-        image_name = image_name.replace('_', ':', -1)
-        return image_name, int(memory.replace('MB', ''))
-    
     def _get_default_runtime_image_name(self):
         this_version_str = version_str(sys.version_info)
         if this_version_str == '3.5':
@@ -62,24 +64,44 @@ class AzureFunctionAppBackend:
         elif this_version_str == '3.7':
             image_name = azure_fa_config.RUNTIME_DEFAULT_37
         return image_name
+    
 
-    def build_runtime(self, docker_image_name, dockerfile='Dockerfile'):
+    def build_runtime(self, docker_image_name, dockerfile='Dockerfile', silent=False):
         """
         Builds a new runtime from a Docker file and pushes it to the Docker hub
         """
         logger.info('Creating a new docker image from Dockerfile')
         logger.info('Docker image name: {}'.format(docker_image_name))
 
-        cmd = 'docker build -t {} -f {} .'.format(docker_image_name, dockerfile)
+        if silent:
+            cmd = 'docker build -q -t {} -f {} .'.format(docker_image_name, dockerfile)
+        else: 
+            cmd = 'docker build -t {} -f {} .'.format(docker_image_name, dockerfile)
 
         res = os.system(cmd)
         if res != 0:
             exit()
+
 
         cmd = 'docker push {}'.format(docker_image_name)
-        res = os.system(cmd)
+        if silent:
+            child = sp.Popen(cmd, shell=True, stdout=sp.PIPE, stderr=sp.PIPE)
+            child.wait()
+            res = child.returncode
+        else:
+            res = os.system(cmd)
         if res != 0:
             exit()
+
+    def _format_queue_name(self, docker_image_name, extract_preinstalls_queue=None):
+        #  Using different queue names because there's a delay between deleting a queue   
+        #  and creating another one with the same name
+        if not extract_preinstalls_queue:
+            return self._format_action_name(docker_image_name)
+        elif extract_preinstalls_queue == 'trigger':
+            return azure_fa_config.EXTRACT_TRIGGER_QUEUE_NAME
+        elif extract_preinstalls_queue == 'result':
+            return azure_fa_config.EXTRACT_RESULT_QUEUE_NAME
 
     def _create_runtime_custom(self, docker_image_name, extract_preinstalls=False):
         """
@@ -107,6 +129,41 @@ class AzureFunctionAppBackend:
             action_location = os.path.join(os.path.abspath('pywren-ibm-cloud'), 'pywren_ibm_cloud')
             shutil.copytree(module_location, action_location)
 
+        def get_bindings_str(docker_image_name, extract_preinstalls=False):
+            if not extract_preinstalls:
+                bindings = {
+                    "scriptFile": "__init__.py",
+                    "bindings": [
+                        {
+                            "name": "msgIn",
+                            "type": "queueTrigger",
+                            "direction": "in",
+                            "queueName": self._format_queue_name(docker_image_name),
+                            "connection": "AzureWebJobsStorage"
+                        }
+                    ]}
+            else:
+                bindings = {
+                    "scriptFile": "__init__.py",
+                    "bindings": [
+                        {
+                            "name": "msgIn",
+                            "type": "queueTrigger",
+                            "direction": "in",
+                            "queueName": self._format_queue_name(docker_image_name,
+                                         extract_preinstalls_queue='trigger'),
+                            "connection": "AzureWebJobsStorage"
+                        },
+                        {
+                            "name": "msgOut",
+                            "type": "queue",
+                            "direction": "out",
+                            "queueName": self._format_queue_name(docker_image_name,
+                                         extract_preinstalls_queue='result'),
+                            "connection": "AzureWebJobsStorage"
+                        }]}
+            return json.dumps(bindings)
+
         initial_dir = os.getcwd()
         temp_folder = next(tempfile._get_candidate_names())
         os.mkdir(temp_folder)
@@ -114,35 +171,53 @@ class AzureFunctionAppBackend:
 
         action_name = self._format_action_name(docker_image_name)
         cmd = 'func init {} --docker --worker-runtime python'.format(action_name)
-        os.system(cmd)
+        child = sp.Popen(cmd, shell=True, stdout=sp.PIPE) # silent
+        child.wait()
+
         os.chdir(action_name)
         cmd = 'func new --name {} --template "HttpTrigger"'.format(action_name)
-        os.system(cmd)
+        child = sp.Popen(cmd, shell=True, stdout=sp.PIPE)
+        child.wait()
 
-        current_location = os.path.dirname(os.path.abspath(__file__))
-        if extract_preinstalls:
-            action_location = os.path.join(current_location, 'extract_preinstalls_action.py')
-        else:
-            action_location = os.path.join(current_location, 'entry_point.py')
+        try:
+            # Add entry point, create trigger queue
+            action_templates = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'action')
+            if extract_preinstalls:
+                entry_point_location = os.path.join(action_templates, 'extract_preinstalls_action.py')
+                queue_name = self._format_queue_name(docker_image_name, extract_preinstalls_queue='trigger')
+            else:
+                entry_point_location = os.path.join(action_templates, 'handler_action.py')
+                queue_name = self._format_queue_name(docker_image_name)
 
-        entry_point_location = os.path.join(os.getcwd(), action_name, '__init__.py')
-        shutil.copyfile(action_location, entry_point_location)
+            project_location = os.path.join(initial_dir, temp_folder, action_name)
+            action_location = os.path.join(project_location, action_name, '__init__.py')
+            shutil.copyfile(entry_point_location, action_location)
 
-        pywren_req = os.path.join(current_location, 'requirements.txt')
-        action_req = os.path.join(os.getcwd(), 'requirements.txt')
-        shutil.copyfile(pywren_req, action_req)
-        
-        edit_dockerfile_image(docker_image_name)
-        add_pywren_module_folder()
+            self.queue_service.create_queue(queue_name)
 
-        logger.info('Creating new PyWren runtime based on Docker image {}'.format(docker_image_name))
+            # Edit the function's bindings for it to be a queue triggered function
+            with open(os.path.join(project_location, action_name, 'function.json'), 'w') as bindings_file:
+                bindings_file.write(get_bindings_str(docker_image_name, extract_preinstalls))
+            
+            host_template = os.path.join(action_templates, 'host.json')
+            host_file = os.path.join(project_location, 'host.json')
+            shutil.copyfile(host_template, host_file)
 
-        action_image_name = '{}/functionapp:{}'.format(self.azure_fa_config['docker_username'], action_name[-16:])
-        self.build_runtime(action_image_name)
-        self.fa_client.create_action(action_name, action_image_name)
+            # Add pywren dependencies
+            pywren_req = os.path.join(action_templates, 'requirements.txt')
+            action_req = os.path.join(project_location, 'requirements.txt')
+            shutil.copyfile(pywren_req, action_req)
+            
+            edit_dockerfile_image(docker_image_name) # Edit 'FROM' image from the Dockerfile to the custom image
+            add_pywren_module_folder() # Add the whole current module
 
-        os.chdir(initial_dir)
-        shutil.rmtree(temp_folder, ignore_errors=True)
+            # Build image and create action
+            action_image_name = '{}/functionapp:{}'.format(self.azure_fa_config['docker_username'], action_name[-16:])
+            self.build_runtime(action_image_name, silent=True)
+            self.fa_client.create_action(action_name, action_image_name)
+        finally: 
+            os.chdir(initial_dir)
+            shutil.rmtree(temp_folder, ignore_errors=True) # Remove tmp project folder
 
     def _create_runtime_default(self):
         docker_image_name = self._get_default_runtime_image_name()
@@ -152,11 +227,16 @@ class AzureFunctionAppBackend:
 
     def create_runtime(self, docker_image_name, memory=None, timeout=azure_fa_config.RUNTIME_TIMEOUT_DEFAULT):
         if docker_image_name == 'default':
-            self._create_runtime_default()
-        else:
-            self._create_runtime_custom(docker_image_name)
+            docker_image_name = self._get_default_runtime_image_name()
+        
+        metadata = self._generate_runtime_meta(docker_image_name)
 
-    def delete_runtime(self, docker_image_name):
+        logger.info('Creating new PyWren runtime based on Docker image {}'.format(docker_image_name))
+        self._create_runtime_custom(docker_image_name)
+
+        return metadata
+
+    def delete_runtime(self, docker_image_name, extract_preinstalls=False):
         """
         Deletes a runtime
         """
@@ -164,69 +244,64 @@ class AzureFunctionAppBackend:
             docker_image_name = self._get_default_runtime_image_name()
         action_name = self._format_action_name(docker_image_name)
         self.fa_client.delete_action(action_name)
-
-    # def delete_all_runtimes(self):
-    #     """
-    #     Deletes all runtimes from all packages
-    #     """
-    #     packages = self.cf_client.list_packages()
-    #     for pkg in packages:
-    #         if 'pywren_v' in pkg['name']:
-    #             actions = self.cf_client.list_actions(pkg['name'])
-    #             while actions:
-    #                 for action in actions:
-    #                     self.cf_client.delete_action(pkg['name'], action['name'])
-    #                 actions = self.cf_client.list_actions(pkg['name'])
-    #             self.cf_client.delete_package(pkg['name'])
-
-    # def list_runtimes(self, docker_image_name='all'):
-    #     """
-    #     List all the runtimes deployed in the IBM CF service
-    #     return: list of tuples [docker_image_name, memory]
-    #     """
-    #     if docker_image_name == 'default':
-    #         docker_image_name = self._get_default_runtime_image_name()
-    #     runtimes = []
-    #     actions = self.cf_client.list_actions(self.package)
-
-    #     for action in actions:
-    #         action_image_name, memory = self._unformat_action_name(action['name'])
-    #         if docker_image_name == action_image_name or docker_image_name == 'all':
-    #             runtimes.append([action_image_name, memory])
-    #     return runtimes
+        queue_name = self._format_queue_name(
+            docker_image_name, 
+            extract_preinstalls_queue='trigger' if extract_preinstalls else False)
+        self.queue_service.delete_queue(queue_name)
 
     def invoke(self, docker_image_name, memory=None, payload={}):
         """
-        Invoke -- return information about this invocation
+        Invoke function
         """
+        
         exec_id = payload['executor_id']
         job_id = payload['job_id']
         call_id = payload['call_id']
-        action_name = self._format_action_name(docker_image_name)
+        queue_name = self._format_queue_name(docker_image_name)
         start = time.time()
 
-        # --- TODO: get the endpoint using Azure Active Directory
-        activation_id = self.fa_client.invoke(
-            input('(2) Action endpoint: '),
-            payload)
-        # ---
-        roundtrip = time.time() - start
-        resp_time = format(round(roundtrip, 3), '.3f')
+        try:
+            msg = self.queue_service.put_message(queue_name, json.dumps(payload))
+            activation_id = msg.id
+            roundtrip = time.time() - start
+            resp_time = format(round(roundtrip, 3), '.3f')
 
-        if activation_id is None:
-            log_msg = ('ExecutorID {} | JobID {} - Function {} invocation failed'.format(exec_id, job_id, call_id))
-            logger.debug(log_msg)
-        else:
-            log_msg = ('ExecutorID {} | JobID {} - Function {} invocation done! ({}s) - Activation ID: '
-                       '{}'.format(exec_id, job_id, call_id, resp_time, activation_id))
-            logger.debug(log_msg)
+            if activation_id is None:
+                log_msg = ('ExecutorID {} | JobID {} - Function {} invocation failed'.format(exec_id, job_id, call_id))
+                logger.debug(log_msg)
+            else:
+                log_msg = ('ExecutorID {} | JobID {} - Function {} invocation done! ({}s) - Activation ID: '
+                        '{}'.format(exec_id, job_id, call_id, resp_time, activation_id))
+                logger.debug(log_msg)
+        except Exception:
+            self.queue_service.create_queue(self._format_queue_name(docker_image_name))
+            return self.invoke(docker_image_name, memory=memory, payload=payload)
 
         return activation_id
 
     def invoke_with_result(self, docker_image_name, memory=None, payload={}):
-        return self.fa_client.invoke(
-            input('(1) Action endpoint: '),
-            payload)
+        """
+        Not doable on this implementation, which uses queues as a trigger to the function,
+        and no response is expected after the call.
+        """
+        raise Exception('Cannot invoke_with_result() on this current '
+                        'Azure Function App as a backend implementation')
+
+
+    def _invoke_with_result(self, docker_image_name):
+        result_queue_name = self._format_queue_name(docker_image_name, extract_preinstalls_queue='result')
+        self.queue_service.create_queue(result_queue_name)
+        trigger_queue_name = self._format_queue_name(docker_image_name, extract_preinstalls_queue='trigger')
+        self.queue_service.put_message(trigger_queue_name, '')
+
+        msg = []
+        while not msg:
+            msg = self.queue_service.get_messages(result_queue_name, num_messages=1)
+            time.sleep(0.5)
+        result_str = msg[0].content
+        self.queue_service.delete_queue(result_queue_name)
+        
+        return json.loads(result_str)
 
     def get_runtime_key(self, docker_image_name, runtime_memory):
         """
@@ -239,7 +314,7 @@ class AzureFunctionAppBackend:
 
         return runtime_key
 
-    def generate_runtime_meta(self, docker_image_name):
+    def _generate_runtime_meta(self, docker_image_name):
         """
         Extract installed Python modules from docker image
         """
@@ -248,18 +323,15 @@ class AzureFunctionAppBackend:
 
         # old_stdout = sys.stdout
         # sys.stdout = open(os.devnull, 'w')
-        try:
-            self._create_runtime_custom(docker_image_name, extract_preinstalls=True)
-        except Exception as e:
-            raise e
+        self._create_runtime_custom(docker_image_name, extract_preinstalls=True)
         # sys.stdout = old_stdout
         logger.debug("Extracting Python modules list from: {}".format(docker_image_name))
         try:
-            runtime_meta = self.invoke_with_result(docker_image_name)
+            runtime_meta = self._invoke_with_result(docker_image_name)
         except Exception:
             raise Exception("Unable to invoke 'modules' action")
         try:
-            self.delete_runtime(docker_image_name)
+            self.delete_runtime(docker_image_name, extract_preinstalls=True)
         except Exception:
             raise Exception("Unable to delete 'modules' action")
 

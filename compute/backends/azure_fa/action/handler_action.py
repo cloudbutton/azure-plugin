@@ -14,7 +14,8 @@
 # limitations under the License.
 #
 
-import logging, json
+import logging
+import json
 import azure.functions as func
 from pywren_ibm_cloud.runtime.function_handler.handler import function_handler
 from pywren_ibm_cloud.config import cloud_logging_config
@@ -23,10 +24,6 @@ cloud_logging_config(logging.INFO)
 logger = logging.getLogger('__main__')
 
 
-def main(req: func.HttpRequest) -> func.HttpResponse:
+def main(msgIn: func.QueueMessage):
     logger.info("Starting IBM Cloud Function execution")
-    function_handler(req.get_json())
-    return func.HttpResponse(
-            '{"Execution": "Finished"}',
-            status_code=400
-    )
+    function_handler(msgIn.get_json())

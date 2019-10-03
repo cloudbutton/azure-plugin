@@ -27,4 +27,3 @@ PyYAML==5.1.1
 
 azure-functions
 azure
-pywren-ibm-cloud

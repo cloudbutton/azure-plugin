@@ -3,10 +3,7 @@ from pywren_ibm_cloud.storage.utils import StorageNoSuchKeyError
 from azure.storage.blob import BlockBlobService
 from azure.common import AzureMissingResourceHttpError
 
-
-logging.getLogger('ibm_boto3').setLevel(logging.CRITICAL)
-logging.getLogger('ibm_botocore').setLevel(logging.CRITICAL)
-logging.getLogger('urllib3').setLevel(logging.CRITICAL)
+logging.getLogger('azure.storage.common.storageclient').setLevel(logging.CRITICAL)
 logger = logging.getLogger(__name__)
 
 
