@@ -110,6 +110,13 @@ class AzureBlobStorageBackend:
            raise StorageNoSuchKeyError(bucket_name, '')
 
     def list_objects(self, bucket_name, prefix=None):
+        """
+        Return a list of objects for the given bucket and prefix.
+        :param bucket_name: Name of the bucket.
+        :param prefix: Prefix to filter object names.
+        :return: List of objects in bucket that match the given prefix.
+        :rtype: list of str
+        """
         ### adapted to match ibm_cos method
         try:
             blobs = self.blob_client.list_blobs(bucket_name, prefix)
