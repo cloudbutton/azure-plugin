@@ -36,8 +36,8 @@ Assuming you already have installed PyWren:
     docker_username : <DOCKER_USERNAME>
 ```
    - `account_name`: The name of the Storage Account itself.
-   - `account_key`: An account key. Found in *Storage Account* > *\*account_name\** > *Settings* > *Access Keys*.
-   - `resource_group`: The resource group of your Storage Account. *Storage Account* > *\*account_name\** > *Overview*.
+   - `account_key`: An account key. Found in *Storage Account* > `account_name` > *Settings* > *Access Keys*.
+   - `resource_group`: The resource group of your Storage Account. *Storage Account* > `account_name` > *Overview*.
    - `service_plan`: The service plan / subscription to Azure. Found in *All Resources*.
    - `docker_username`: A Docker username, internally used to push new runtimes.
       
