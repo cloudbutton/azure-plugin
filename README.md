@@ -29,10 +29,10 @@ Assuming you already have installed PyWren:
     account_key  : <AZURE_STORAGE_ACCOUNT_KEY>
 
   azure_fa:
-    resource_group: <AZURE_RESOURCE_GROUP>
-    service_plan: <AZURE_SERVICE_PLAN>
-    account_name : <AZURE_STORAGE_ACCOUNT_NAME>
-    account_key  : <AZURE_STORAGE_ACCOUNT_KEY>
+    resource_group  : <AZURE_RESOURCE_GROUP>
+    service_plan    : <AZURE_SERVICE_PLAN>
+    account_name    : <AZURE_STORAGE_ACCOUNT_NAME>
+    account_key     : <AZURE_STORAGE_ACCOUNT_KEY>
     docker_username : <DOCKER_USERNAME>
 ```
    - `account_name`: The name of the Storage Account itself.
@@ -44,7 +44,7 @@ Assuming you already have installed PyWren:
       In addition, you must indicate that you want PyWren to use Azure Storage / Functions:     
 ```yaml
   pywren:
-    storage_backend: azure_blob
-    compute_backend: azure_fa
+    storage_backend : azure_blob
+    compute_backend : azure_fa
 ```
      
