@@ -6,6 +6,7 @@ import tempfile
 import hashlib
 import time
 import json
+import subprocess as sp
 from . import config as azure_fa_config
 from pywren_ibm_cloud.utils import version_str
 from pywren_ibm_cloud.version import __version__
