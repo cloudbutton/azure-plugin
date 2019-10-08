@@ -18,7 +18,7 @@ Assuming you already have installed PyWren:
   1. Clone this repository.
   2. Execute the `install_plugin.py` script. 
   ```
-      python3 install_script.py
+      python3 install_plugin.py
   ```
   3. Edit your local pywren config file (typically ~/.pywren_config)
      with the new parameters for Azure.\
@@ -36,9 +36,10 @@ Assuming you already have installed PyWren:
     docker_username : <DOCKER_USERNAME>
 ```
    - `account_name`: The name of the Storage Account itself.
-   - `account_key`: An account key. Found in *Storage Account* > `account_name` > *Settings* > *Access Keys*.
-   - `resource_group`: The resource group of your Storage Account. *Storage Account* > `account_name` > *Overview*.
-   - `service_plan`: The service plan / subscription to Azure. Found in *All Resources*.
+   - `account_key`: An Account Key. Found in *Storage Account* > `account_name` > *Settings* > *Access Keys*.
+   - `resource_group`: The Rresource Group of your Storage Account. *Storage Account* > `account_name` > *Overview*.\
+                       With it, you decide where your app will be located. You can create new Resource Groups on the [Azure Portal](https://portal.azure.com/), but remember to set the same Resource Group as your Storage Account.
+   - `service_plan`: The Service Plan / subscription to Azure. Found in *All Resources*.
    - `docker_username`: A Docker username, internally used to push new runtimes.
       
       In addition, you must indicate that you want PyWren to use Azure Storage / Functions:     
