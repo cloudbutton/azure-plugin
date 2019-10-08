@@ -18,7 +18,7 @@ Assuming you already have installed PyWren:
   1. Clone this repository.
   2. Execute the `install_plugin.py` script. 
   ```
-      python3 install_plugin.py
+   python3 install_plugin.py
   ```
   3. Edit your local pywren config file (typically ~/.pywren_config)
      with the new parameters for Azure.\
@@ -49,3 +49,8 @@ Assuming you already have installed PyWren:
     compute_backend : azure_fa
 ```
      
+     
+### Custom Docker images
+
+An Azure Functinon App created from a custom Docker image must be based on one of [their images](https://hub.docker.com/_/microsoft-azure-functions-base). PyWren also requires some additional Python modules installed in that image. Therefore, if you wish to use a custom Docker image, it will have to be based on an image that meets all these requierements.\
+We provide you a premade runtime image `dhak/pywren-runtime-azure:default` ready to use to simplify the process, and you can `$ docker build` on top of that.
