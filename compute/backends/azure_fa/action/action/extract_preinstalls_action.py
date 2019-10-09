@@ -20,19 +20,6 @@ import json
 import azure.functions as func
 from azure.storage.queue import QueueService
 
-# def main(msg: func.QueueMessage):
-#     print("Extracting preinstalled Python modules...")
-#     runtime_meta = dict()
-#     mods = list(pkgutil.iter_modules())
-#     runtime_meta['preinstalls'] = [entry for entry in sorted([[mod, is_pkg] for _, mod, is_pkg in mods])]
-#     python_version = sys.version_info
-#     runtime_meta['python_ver'] = str(python_version[0])+"."+str(python_version[1])
-
-#     params = msg.get_json()
-#     qs = QueueService(account_name=params['account_name'],
-#                       account_key=params['account_key'])
-#     qs.put_message(params['result_queue_name'], json.dumps(runtime_meta))
-
 
 def main(msgIn: func.QueueMessage, msgOut: func.Out[func.QueueMessage]):
     print("Extracting preinstalled Python modules...")

@@ -107,6 +107,7 @@ class AzureFunctionAppBackend:
         """
         Creates a new runtime from a custom docker image
         """
+        
         def edit_dockerfile_image(docker_image_name):
             with open('Dockerfile', 'r') as df:
                 lines = df.read().splitlines()
@@ -169,52 +170,46 @@ class AzureFunctionAppBackend:
         os.mkdir(temp_folder)
         os.chdir(temp_folder)
 
-        action_name = self._format_action_name(docker_image_name)
-        cmd = 'func init {} --docker --worker-runtime python'.format(action_name)
-        child = sp.Popen(cmd, shell=True, stdout=sp.PIPE) # silent
-        child.wait()
-
-        os.chdir(action_name)
-        cmd = 'func new --name {} --template "HttpTrigger"'.format(action_name)
-        child = sp.Popen(cmd, shell=True, stdout=sp.PIPE)
-        child.wait()
-
         try:
-            # Add entry point, create trigger queue
-            action_templates = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'action')
+            action_name = self._format_action_name(docker_image_name)
+            project_dir = os.path.join(initial_dir, temp_folder, action_name)
+            action_dir = os.path.join(project_dir, action_name)
+
+            # Create project folder from the template
+            project_template = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'action')
+            shutil.copytree(project_template, project_dir)
+            os.rename(os.path.join(project_dir, 'action'),
+                        os.path.join(action_dir))
+            
+            # Edit 'FROM' layer from the Dockerfile to the custom desired image 
+            # Add the whole current pywren module
+            os.chdir(project_dir)
+            edit_dockerfile_image(docker_image_name) 
+            add_pywren_module_folder() 
+
+            # Set entry point file
             if extract_preinstalls:
-                entry_point_location = os.path.join(action_templates, 'extract_preinstalls_action.py')
+                entry_point_file = 'extract_preinstalls_action.py'
                 queue_name = self._format_queue_name(docker_image_name, extract_preinstalls_queue='trigger')
             else:
-                entry_point_location = os.path.join(action_templates, 'handler_action.py')
+                entry_point_file = 'handler_action.py'
                 queue_name = self._format_queue_name(docker_image_name)
 
-            project_location = os.path.join(initial_dir, temp_folder, action_name)
-            action_location = os.path.join(project_location, action_name, '__init__.py')
-            shutil.copyfile(entry_point_location, action_location)
-
-            self.queue_service.create_queue(queue_name)
+            os.rename(os.path.join(action_dir, entry_point_file), 
+                        os.path.join(action_dir, '__init__.py'))
 
             # Edit the function's bindings for it to be a queue triggered function
-            with open(os.path.join(project_location, action_name, 'function.json'), 'w') as bindings_file:
+            with open(os.path.join(action_dir, 'function.json'), 'w') as bindings_file:
                 bindings_file.write(get_bindings_str(docker_image_name, extract_preinstalls))
-            
-            host_template = os.path.join(action_templates, 'host.json')
-            host_file = os.path.join(project_location, 'host.json')
-            shutil.copyfile(host_template, host_file)
-
-            # Add pywren dependencies
-            pywren_req = os.path.join(action_templates, 'requirements.txt')
-            action_req = os.path.join(project_location, 'requirements.txt')
-            shutil.copyfile(pywren_req, action_req)
-            
-            edit_dockerfile_image(docker_image_name) # Edit 'FROM' image from the Dockerfile to the custom image
-            add_pywren_module_folder() # Add the whole current module
-
-            # Build image and create action
+                
+            # Create queue, build image and create action
+            self.queue_service.create_queue(queue_name)
             action_image_name = '{}/functionapp:{}'.format(self.azure_fa_config['docker_username'], action_name[-16:])
             self.build_runtime(action_image_name, silent=True)
             self.fa_client.create_action(action_name, action_image_name)
+
+        except Exception:
+            raise Exception("Unable to create the new runtime")
         finally: 
             os.chdir(initial_dir)
             shutil.rmtree(temp_folder, ignore_errors=True) # Remove tmp project folder
@@ -321,10 +316,8 @@ class AzureFunctionAppBackend:
         if docker_image_name == 'default':
             docker_image_name = self._get_default_runtime_image_name()
 
-        # old_stdout = sys.stdout
-        # sys.stdout = open(os.devnull, 'w')
         self._create_runtime_custom(docker_image_name, extract_preinstalls=True)
-        # sys.stdout = old_stdout
+
         logger.debug("Extracting Python modules list from: {}".format(docker_image_name))
         try:
             runtime_meta = self._invoke_with_result(docker_image_name)
