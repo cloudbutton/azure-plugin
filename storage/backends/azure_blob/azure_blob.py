@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 class AzureBlobStorageBackend:
 
-    def __init__(self, azure_blob_config):
+    def __init__(self, azure_blob_config, bucket=None, executor_id=None):
         self.blob_client = BlockBlobService(account_name=azure_blob_config['account_name'],
                                             account_key=azure_blob_config['account_key'])
 

@@ -25,8 +25,8 @@ def main(msgIn: func.QueueMessage, msgOut: func.Out[func.QueueMessage]):
     print("Extracting preinstalled Python modules...")
     runtime_meta = dict()
     mods = list(pkgutil.iter_modules())
-    runtime_meta['preinstalls'] = [entry for entry in sorted([[mod, is_pkg] for _, mod, is_pkg in mods])]
+    runtime_meta["preinstalls"] = [entry for entry in sorted([[mod, is_pkg] for _, mod, is_pkg in mods])]
     python_version = sys.version_info
-    runtime_meta['python_ver'] = str(python_version[0])+"."+str(python_version[1])
+    runtime_meta["python_ver"] = str(python_version[0])+"."+str(python_version[1])
 
     msgOut.set(json.dumps(runtime_meta))

@@ -14,16 +14,29 @@
 # limitations under the License.
 #
 
+
 import logging
 import json
 import azure.functions as func
-from pywren_ibm_cloud.runtime.function_handler.handler import function_handler
+from pywren_ibm_cloud.version import __version__
 from pywren_ibm_cloud.config import cloud_logging_config
+from pywren_ibm_cloud.function import function_handler
+from pywren_ibm_cloud.function import function_invoker
 
 cloud_logging_config(logging.INFO)
 logger = logging.getLogger('__main__')
 
 
 def main(msgIn: func.QueueMessage):
-    logger.info("Starting IBM Cloud Function execution")
-    function_handler(msgIn.get_json())
+    try:
+        args = json.loads(msgIn.get_body())
+    except:        
+        args = msgIn.get_json()
+
+
+    if 'remote_invoker' in args:
+        logger.info("PyWren v{} - Starting invoker".format(__version__))
+        function_invoker(args)
+    else:
+        logger.info("PyWren v{} - Starting execution".format(__version__))
+        function_handler(args)

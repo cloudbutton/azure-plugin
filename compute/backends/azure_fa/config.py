@@ -1,17 +1,17 @@
 import sys
+import os
 from pywren_ibm_cloud.utils import version_str
 
-RUNTIME_DEFAULT_35 = 'dhak/pywren-runtime-azure:default'
-RUNTIME_DEFAULT_36 = 'dhak/pywren-runtime-azure:default'
-RUNTIME_DEFAULT_37 = 'dhak/pywren-runtime-azure:default'
+RUNTIME_DEFAULT_35 = 'pywren-runtime'
+RUNTIME_DEFAULT_36 = 'pywren-runtime' #'dhak/azure-pywren-runtime:default' # 'mcr.microsoft.com/azure-functions/python:2.0' #'prova-sense'
+RUNTIME_DEFAULT_37 = 'pywren-runtime'
 
 RUNTIME_TIMEOUT_DEFAULT = 600000  # Default: 600000 milliseconds => 10 minutes
 RUNTIME_TIMEOUT_MAX = 600000    # Platform maximum
 RUNTIME_TIMEOUT_MIN  = 300000   # Platform minimum
 RUNTIME_MEMORY_DEFAULT = 256  # Default memory: 256 MB
 
-EXTRACT_TRIGGER_QUEUE_NAME = "pywren-queue-extractingmodules-trigger"
-EXTRACT_RESULT_QUEUE_NAME = "pywren-queue-extractingmodules-result"
+ACTION_MODULES_DIR = os.path.join('.python_packages', 'lib', 'site-packages')
 
 def load_config(config_data=None):
     this_version_str = version_str(sys.version_info)
@@ -41,7 +41,7 @@ def load_config(config_data=None):
     if 'azure_fa' not in config_data:
         raise Exception("azure_fa section is mandatory in the configuration")
 
-    required_parameters = ('resource_group', 'service_plan', 'account_name', 'account_key', 'docker_username')
+    required_parameters = ('resource_group', 'consumption_plan', 'account_name', 'account_key', 'docker_username')
 
     if set(required_parameters) > set(config_data['azure_fa']):
         raise Exception('You must provide {} to access to Azure Function App '\

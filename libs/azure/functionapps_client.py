@@ -21,16 +21,25 @@ class FunctionAppClient:
             Constructor
             """
             self.resource_group = config['resource_group']
-            self.service_plan = config['service_plan']
+            self.consumption_plan = config['consumption_plan']
             self.storage_account = config['account_name']
 
-      def create_action(self, action_name, image_name, memory=None):
+      def create_action(self, action_name, memory=None):
 
-            cmd = 'az functionapp create --name {} --storage-account {} --resource-group {} --plan {} --deployment-container-image-name {}'\
-                  .format(action_name, self.storage_account, self.resource_group, self.service_plan, image_name)
-            child = sp.Popen(cmd, shell=True, stdout=sp.PIPE, stderr=sp.PIPE) # silent
-            child.wait()
-            logger.error(child.stderr.read().decode())
+            cmd = 'az functionapp create --name {} --storage-account {} --resource-group {} --os-type Linux \
+                  --runtime python --runtime-version 3.6 --consumption-plan-location {}'\
+                  .format(action_name, self.storage_account, self.resource_group, self.consumption_plan)
+            # child = sp.Popen(cmd, shell=True, stdout=sp.PIPE, stderr=sp.PIPE) # silent
+            # child.wait()
+            # logger.error(child.stderr.read().decode())
+            os.system(cmd)
+
+            time.sleep(40)
+            cmd = 'func azure functionapp publish {} --python --no-build'.format(action_name)
+            # child = sp.Popen(cmd, shell=True, stdout=sp.PIPE, stderr=sp.PIPE) # silent
+            # child.wait()
+            # logger.error(child.stderr.read().decode())
+            os.system(cmd)
 
             cmd = 'az storage account show-connection-string --resource-group {} --name {} --query connectionString --output tsv'\
                   .format(self.resource_group, self.storage_account)
