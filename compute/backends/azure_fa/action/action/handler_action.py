@@ -33,7 +33,6 @@ def main(msgIn: func.QueueMessage):
     except:        
         args = msgIn.get_json()
 
-
     if 'remote_invoker' in args:
         logger.info("PyWren v{} - Starting invoker".format(__version__))
         function_invoker(args)

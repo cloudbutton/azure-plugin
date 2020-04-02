@@ -25,13 +25,13 @@ class AzureFunctionAppBackend:
     """
 
     def __init__(self, config):
-        self.log_level = os.getenv('CB_LOG_LEVEL')
+        self.log_level = os.getenv('PYWREN_LOGLEVEL')
         self.name = 'azure_fa'
-        self.azure_fa_config = config
-        self.version = 'pywren_v'+__version__
-        self.fa_client = FunctionAppClient(self.azure_fa_config)
-        self.queue_service = QueueService(account_name=self.azure_fa_config['account_name'],
-                                          account_key=self.azure_fa_config['account_key'])
+        self.config = config
+
+        self.fa_client = FunctionAppClient(self.config)
+        self.queue_service = QueueService(account_name=self.config['account_name'],
+                                          account_key=self.config['account_key'])
         self.queue_service.encode_function = QueueMessageFormat.text_base64encode
         self.queue_service.decode_function = QueueMessageFormat.text_base64decode
 
@@ -41,6 +41,95 @@ class AzureFunctionAppBackend:
         if not self.log_level:
             print(log_msg)
 
+
+    def create_runtime(self, docker_image_name, memory=None, timeout=azure_fa_config.RUNTIME_TIMEOUT_DEFAULT):
+        """
+        Creates a new runtime into Azure Function Apps 
+        from the provided Linux image for consumption plan
+        """
+
+        log_msg = 'Creating new PyWren runtime for Azure Function Apps'
+        logger.info(log_msg)
+        if not self.log_level:
+            print(log_msg)
+
+        logger.info('Extracting preinstalls for Azure runtime')
+        metadata = self._generate_runtime_meta()
+
+        logger.info('Creating new PyWren runtime')
+        action_name = self._format_action_name(docker_image_name)
+        self._create_runtime(action_name)
+
+        return metadata
+
+
+    def delete_runtime(self, docker_image_name, extract_preinstalls=False):
+        """
+        Deletes a runtime
+        """
+        if extract_preinstalls:
+            action_name = docker_image_name
+        else:
+            action_name = self._format_action_name(docker_image_name)
+
+        self.fa_client.delete_action(action_name)
+        queue_name = self._format_queue_name(docker_image_name, type='trigger')
+        self.queue_service.delete_queue(queue_name)
+
+
+    def invoke(self, docker_image_name, memory=None, payload={}):
+        """
+        Invoke function
+        """        
+        exec_id = payload['executor_id']
+        job_id = payload['job_id']
+        call_id = payload['call_id']
+        action_name = self._format_action_name(docker_image_name)
+        queue_name = self._format_queue_name(action_name, type='trigger')
+        start = time.time()
+        
+        try:
+            msg = self.queue_service.put_message(queue_name, json.dumps(payload))
+            activation_id = msg.id
+            roundtrip = time.time() - start
+            resp_time = format(round(roundtrip, 3), '.3f')
+
+            if activation_id is None:
+                log_msg = ('ExecutorID {} | JobID {} - Function {} invocation failed'.format(exec_id, job_id, call_id))
+                logger.debug(log_msg)
+            else:
+                log_msg = ('ExecutorID {} | JobID {} - Function {} invocation done! ({}s) - Activation ID: '
+                        '{}'.format(exec_id, job_id, call_id, resp_time, activation_id))
+                logger.debug(log_msg)
+        except Exception:
+            logger.debug('Creating queue (invoke)')
+            self.queue_service.create_queue(queue_name)
+            return self.invoke(docker_image_name, memory=memory, payload=payload)
+
+        return activation_id
+    
+
+    def invoke_with_result(self, docker_image_name, memory=None, payload={}):
+        """
+        Not doable on this implementation, which uses queues as a trigger to the function,
+        and no response is expected after the call.
+        """
+        raise Exception('Cannot invoke_with_result() on this current '
+                        'Azure Function App as a backend implementation')
+
+                        
+    def get_runtime_key(self, docker_image_name, runtime_memory):
+        """
+        Method that creates and returns the runtime key.
+        Runtime keys are used to uniquely identify runtimes within the storage,
+        in order to know which runtimes are installed and which not.
+        """
+        action_name = self._format_action_name(docker_image_name)
+        runtime_key = os.path.join(self.name, action_name)
+
+        return runtime_key
+
+
     def _format_action_name(self, action_name):
         sha_1 = hashlib.sha1()
         block = action_name.encode('ascii', errors='ignore')
@@ -48,28 +137,44 @@ class AzureFunctionAppBackend:
         tag = sha_1.hexdigest()[:8]
 
         sha_1 = hashlib.sha1()
-        block = self.azure_fa_config['account_name'].encode('ascii', errors='ignore')
+        block = self.config['account_name'].encode('ascii', errors='ignore')
         sha_1.update(block)
         tag = tag + sha_1.hexdigest()[:8]
         
-        version = re.sub(r'[/_:.]', '', __version__)
+        version = re.sub(r'[/_:.-]', '', __version__)
         action_name = action_name[:16] + '-' + version[:5] + '-' + tag
 
         return action_name
+
 
     def _format_queue_name(self, action_name, type):
         #  Using different queue names because there's a delay between deleting a queue   
         #  and creating another one with the same name
         return action_name + '-' + type
 
-    def _create_runtime_custom(self, action_name, extract_preinstalls=False):
+
+    def _create_runtime(self, action_name, extract_preinstalls=False):
         """
-        Creates a new runtime from a custom docker image
+        Creates a new runtime with the base modules and pywren-ibm-cloud
         """
 
         def add_base_modules():
-            cmd = 'pip3 install --system -t {} -r requirements.txt'.format(azure_fa_config.ACTION_MODULES_DIR)
-            os.system(cmd)
+            cmd = 'pip3 install -t {} -r requirements.txt'.format(azure_fa_config.ACTION_MODULES_DIR)
+            child = sp.Popen(cmd, shell=True, stdout=sp.PIPE, stderr=sp.PIPE) # silent
+            child.wait()
+            logger.debug(child.stdout.read().decode())
+            logger.error(child.stderr.read().decode())
+
+            if child.returncode != 0:
+                cmd = 'pip install -t {} -r requirements.txt'.format(azure_fa_config.ACTION_MODULES_DIR)
+                child = sp.Popen(cmd, shell=True, stdout=sp.PIPE, stderr=sp.PIPE) # silent
+                child.wait()
+                logger.debug(child.stdout.read().decode())
+                logger.error(child.stderr.read().decode())
+
+                if child.returncode != 0:
+                    logger.critical('Failed to install base modules')
+                    exit(1)
 
         def add_pywren_module(action_name):
             module_location = os.path.dirname(os.path.abspath(pywren_ibm_cloud.__file__))
@@ -119,16 +224,17 @@ class AzureFunctionAppBackend:
             project_dir = os.path.join(initial_dir, temp_folder, action_name)
             action_dir = os.path.join(project_dir, action_name)
 
-            # Create project folder from the template
+            # Create project folder from template
             project_template = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'action')
             shutil.copytree(project_template, project_dir)
             os.chdir(project_dir)
             os.rename('action', action_dir)
             
-            # Add the whole current pywren module
+            # Add the base dependencies and current pywren module
+            logger.debug('Adding runtime base modules')
             os.makedirs(azure_fa_config.ACTION_MODULES_DIR, exist_ok=True)
             add_base_modules()
-            add_pywren_module(action_name) 
+            add_pywren_module(action_name)
 
             # Set entry point file
             if extract_preinstalls:
@@ -144,128 +250,62 @@ class AzureFunctionAppBackend:
                 bindings_file.write(get_bindings_str(action_name, extract_preinstalls))
                 
             # Create trigger queue, create action
+            logger.debug('Creating trigger queue')
             queue_name = self._format_queue_name(action_name, type='trigger')
             self.queue_service.create_queue(queue_name)
+
             self.fa_client.create_action(action_name)
-            print('Created function:', action_name)
 
         except Exception as e:
             raise Exception("Unable to create the new runtime", e)
+
         finally: 
             os.chdir(initial_dir)
-            #shutil.rmtree(temp_folder, ignore_errors=True) # Remove tmp project folder
+            shutil.rmtree(temp_folder, ignore_errors=True) # Remove tmp project folder
+        
 
-
-    def get_unique_id(self):
-        return str(uuid.uuid4()).replace('-', '')[:10]
-
-    def create_runtime(self, docker_image_name, memory=None, timeout=azure_fa_config.RUNTIME_TIMEOUT_DEFAULT):
-
-        unique_id = self.get_unique_id()
-        metadata = self._generate_runtime_meta('pywren-extract-preinstalls-' + unique_id)
-        # print(json.dumps(metadata))
-        # with open('/home/pol/Desktop/azure/sleep_test/preinstalls.json') as f:
-        #     metadata = json.loads(f.read())
-
-        logger.info('Creating new PyWren runtime based on {}'.format(docker_image_name))
-        self._create_runtime_custom(self._format_action_name(docker_image_name))
-
-        return metadata
-
-    def delete_runtime(self, docker_image_name, extract_preinstalls=False):
+    def _generate_runtime_meta(self):
         """
-        Deletes a runtime
+        Extract installed Python modules from Azure runtime
         """
+        
+        action_name = 'pywren-extract-preinstalls-' + get_unique_id()
+        self._create_runtime(action_name, extract_preinstalls=True)
 
-        action_name = self._format_action_name(docker_image_name)
-        self.fa_client.delete_action(action_name)
-        queue_name = self._format_queue_name(docker_image_name, type='trigger')
-        self.queue_service.delete_queue(queue_name)
-
-    def invoke(self, docker_image_name, memory=None, payload={}):
-        """
-        Invoke function
-        """        
-        exec_id = payload['executor_id']
-        job_id = payload['job_id']
-        call_id = payload['call_id']
-        action_name = self._format_action_name(docker_image_name)
-        queue_name = self._format_queue_name(action_name, type='trigger')
-        start = time.time()
-        print(json.dumps(payload))
+        logger.info("Invoking 'extract-preinstalls' action")
         try:
-            msg = self.queue_service.put_message(queue_name, json.dumps(payload))
-            activation_id = msg.id
-            roundtrip = time.time() - start
-            resp_time = format(round(roundtrip, 3), '.3f')
-
-            if activation_id is None:
-                log_msg = ('ExecutorID {} | JobID {} - Function {} invocation failed'.format(exec_id, job_id, call_id))
-                logger.debug(log_msg)
-            else:
-                log_msg = ('ExecutorID {} | JobID {} - Function {} invocation done! ({}s) - Activation ID: '
-                        '{}'.format(exec_id, job_id, call_id, resp_time, activation_id))
-                logger.debug(log_msg)
+            runtime_meta = self._invoke_with_result(action_name)
         except Exception:
-            self.queue_service.create_queue(queue_name)
-            return self.invoke(docker_image_name, memory=memory, payload=payload)
+            raise Exception("Unable to invoke 'extract-preinstalls' action")
+        try:
+            self.delete_runtime(action_name, extract_preinstalls=True)
+        except Exception:
+            raise Exception("Unable to delete 'extract-preinstalls' action")
 
-        return activation_id
+        if not runtime_meta or 'preinstalls' not in runtime_meta:
+            raise Exception(runtime_meta)
 
-    def invoke_with_result(self, docker_image_name, memory=None, payload={}):
-        """
-        Not doable on this implementation, which uses queues as a trigger to the function,
-        and no response is expected after the call.
-        """
-        raise Exception('Cannot invoke_with_result() on this current '
-                        'Azure Function App as a backend implementation')
+        logger.info("Extracted metadata succesfully")
+        return runtime_meta
 
 
-    def _invoke_with_result(self, docker_image_name):
-        result_queue_name = self._format_queue_name(docker_image_name, type='result')
+    def _invoke_with_result(self, action_name):
+        result_queue_name = self._format_queue_name(action_name, type='result')
         self.queue_service.create_queue(result_queue_name)
-        trigger_queue_name = self._format_queue_name(docker_image_name, type='trigger')
+        trigger_queue_name = self._format_queue_name(action_name, type='trigger')
         self.queue_service.put_message(trigger_queue_name, '')
 
         msg = []
         while not msg:
             msg = self.queue_service.get_messages(result_queue_name, num_messages=1)
             time.sleep(0.5)
+
         result_str = msg[0].content
         self.queue_service.delete_queue(result_queue_name)
         
         return json.loads(result_str)
 
-    def get_runtime_key(self, docker_image_name, runtime_memory):
-        """
-        Method that creates and returns the runtime key.
-        Runtime keys are used to uniquely identify runtimes within the storage,
-        in order to know which runtimes are installed and which not.
-        """
-        action_name = self._format_action_name(docker_image_name)
-        runtime_key = os.path.join(self.name, action_name)
+    
+def get_unique_id():
+    return str(uuid.uuid4()).replace('-', '')[:10]
 
-        return runtime_key
-
-    def _generate_runtime_meta(self, action_name):
-        """
-        Extract installed Python modules from docker image
-        """
-
-        self._create_runtime_custom(action_name, extract_preinstalls=True)
-
-        logger.debug("Extracting Python modules list from Azure Linux host")
-        try:
-            print('Invoking extract metadata')
-            runtime_meta = self._invoke_with_result(action_name)
-        except Exception:
-            raise Exception("Unable to invoke 'modules' action")
-        try:
-            self.delete_runtime(action_name, extract_preinstalls=True)
-        except Exception:
-            raise Exception("Unable to delete 'modules' action")
-
-        if not runtime_meta or 'preinstalls' not in runtime_meta:
-            raise Exception(runtime_meta)
-
-        return runtime_meta
