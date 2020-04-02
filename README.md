@@ -7,7 +7,7 @@ Cloudbutton toolkit plugin for Azure Function Apps and Azure Blob Storage.
 ## Requirements
 
  - [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli?view=azure-cli-latest)
- - [Docker](https://docs.docker.com/install/)
+ - [pip](https://pypi.org/project/pip/) (updated)
  
 ## Plugin setup
 
@@ -24,26 +24,27 @@ Assuming you already have installed PyWren:
      See [config_tempate.yaml](/config_template.yaml)
 ```yaml
   azure_blob:
-    account_name : <AZURE_STORAGE_ACCOUNT_NAME>
-    account_key  : <AZURE_STORAGE_ACCOUNT_KEY>
+    account_name : <STORAGE_ACCOUNT_NAME>
+    account_key : <STORAGE_ACCOUNT_KEY>
 
   azure_fa:
-    resource_group  : <AZURE_RESOURCE_GROUP>
-    service_plan    : <AZURE_SERVICE_PLAN>
-    account_name    : <AZURE_STORAGE_ACCOUNT_NAME>
-    account_key     : <AZURE_STORAGE_ACCOUNT_KEY>
-    docker_username : <DOCKER_USERNAME>
+    resource_group : <RESOURCE_GROUP>
+    location : <CONSUMPTION_PLAN_LOCATION>
+    account_name : <STORAGE_ACCOUNT_NAME>
+    account_key : <STORAGE_ACCOUNT_KEY>
+    functions_version : <AZURE_FUNCTIONS_VERSION>
 ```
-   - `account_name`: The name of the Storage Account itself.
-   - `account_key`: An Account Key. Found in *Storage Account* > `account_name` > *Settings* > *Access Keys*.
-   - `resource_group`: The Rresource Group of your Storage Account. *Storage Account* > `account_name` > *Overview*.\
-                       With it, you decide where your app will be located. You can create new Resource Groups on the [Azure Portal](https://portal.azure.com/), but remember to set the same Resource Group as your Storage Account.
-   - `service_plan`: The Service Plan / subscription to Azure. Found in *All Resources*.
-   - `docker_username`: A Docker username, internally used to push new runtimes.
+   - `account_name`: the name of the Storage Account itself.
+   - `account_key`: an Account Key, found in *Storage Account* > `account_name` > *Settings* > *Access Keys*.
+   - `resource_group`: the Resource Group of your Storage Account. *Storage Account* > `account_name` > *Overview*.
+   - `locatoin`: the location of the consumption plan for the runtime. \
+      Use `az functionapp list-consumption-locations` to view available locations.
+   - `functions_version`: optional, the Azure Functions runtime version (2 or 3).
       
-      In addition, you must indicate that you want PyWren to use Azure Storage / Functions:     
+      In addition, you have to specify a container that will be used internally by PyWren, and you have indicate that you want PyWren to use Azure Storage / Functions:     
 ```yaml
   pywren:
+    storage_bucket: <CONTAINER_NAME>
     storage_backend : azure_blob
     compute_backend : azure_fa
 ```
@@ -51,8 +52,6 @@ Assuming you already have installed PyWren:
 ```
   az login
 ```
-     
-### Custom Docker images
-
-An Azure Functinon App created from a custom Docker image must be based on one of [their images](https://hub.docker.com/_/microsoft-azure-functions-base). PyWren also requires some additional Python modules installed in that image. Therefore, if you wish to use a custom Docker image, it will have to be based on an image that meets all these requierements.\
-We provide a premade runtime image `dhak/pywren-runtime-azure:default` ready to use to simplify the process, so you can `$ docker build` on top of that.
+  5. Use PyWren in your Python code.
+  
+Note: the first time executing it will take several minutes to deploy the runtime. If you want to see more information about the process, you can enable logging by passing the argument `pywren.function_executor(log_level='INFO')`.
