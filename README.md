@@ -8,6 +8,8 @@ Cloudbutton toolkit plugin for Azure Function Apps and Azure Blob Storage.
 
  - [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli?view=azure-cli-latest)
  - [pip](https://pypi.org/project/pip/) (updated)
+ - azure-storage-blob 2.1.0 (`pip install azure-storage-blob==2.1.0`)
+ - azure-storage-queue 2.1.0 (`pip install azure-storage-queue==2.1.0`)
  
 ## Plugin setup
 
