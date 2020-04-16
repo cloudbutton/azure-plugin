@@ -2,10 +2,10 @@ import logging
 from pywren_ibm_cloud.storage.utils import StorageNoSuchKeyError
 from azure.storage.blob import BlockBlobService
 from azure.common import AzureMissingResourceHttpError
+from io import BytesIO
 
 logging.getLogger('azure.storage.common.storageclient').setLevel(logging.CRITICAL)
 logger = logging.getLogger(__name__)
-
 
 class AzureBlobStorageBackend:
 
@@ -30,6 +30,7 @@ class AzureBlobStorageBackend:
         """
         if isinstance(data, str):
             data = data.encode()
+
         self.blob_client.create_blob_from_bytes(bucket_name, key, data)
 
     def get_object(self, bucket_name, key, stream=False, extra_get_args={}):
@@ -46,10 +47,12 @@ class AzureBlobStorageBackend:
             extra_get_args['end_range'] = int(bytes_range[1])
         try:
             if stream:
-                data = self.blob_client.get_blob_to_stream(bucket_name, key, **extra_get_args)
+                stream_out = BytesIO()
+                self.blob_client.get_blob_to_stream(bucket_name, key, stream_out, **extra_get_args)
+                return stream_out
             else:
                 data = self.blob_client.get_blob_to_bytes(bucket_name, key, **extra_get_args)
-            return data.content
+                return data.content
         except AzureMissingResourceHttpError:
             raise StorageNoSuchKeyError(bucket_name, key)
 
@@ -87,21 +90,19 @@ class AzureBlobStorageBackend:
 
     def head_bucket(self, bucket_name):
         """
-        Head bucket from COS with a name. Throws StorageNoSuchKeyError if the given bucket does not exist.
-        :param bucket_name: name of the bucket
+        Head container from COS with a name. Throws StorageNoSuchKeyError if the given container does not exist.
+        :param bucket_name: name of the container
+        :return: Data of the object
         """
         try:
-           self.blob_client.get_container_metadata(bucket_name)
-           return True
+           return self.blob_client.get_container_metadata(bucket_name)
         except Exception:
            raise StorageNoSuchKeyError(bucket_name, '')
 
     def bucket_exists(self, bucket_name):
         """
-        Head bucket from COS with a name. Throws StorageNoSuchKeyError if the given bucket does not exist.
-        :param bucket_name: name of the bucket
-        :return: Data of the object
-        :rtype: str/bytes
+        Returns True if container exists in storage. Throws StorageNoSuchKeyError if the given container does not exist.
+        :param bucket_name: name of the container
         """
         try:
            self.blob_client.get_container_metadata(bucket_name)
