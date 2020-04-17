@@ -49,6 +49,7 @@ class AzureBlobStorageBackend:
             if stream:
                 stream_out = BytesIO()
                 self.blob_client.get_blob_to_stream(bucket_name, key, stream_out, **extra_get_args)
+                stream_out.seek(0)
                 return stream_out
             else:
                 data = self.blob_client.get_blob_to_bytes(bucket_name, key, **extra_get_args)
