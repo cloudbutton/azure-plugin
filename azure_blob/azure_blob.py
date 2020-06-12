@@ -1,11 +1,11 @@
 import logging
-from pywren_ibm_cloud.storage.utils import StorageNoSuchKeyError
+from cloudbutton.engine.backends.storage.utils import StorageNoSuchKeyError
 from azure.storage.blob import BlockBlobService
 from azure.common import AzureMissingResourceHttpError
+from io import BytesIO
 
 logging.getLogger('azure.storage.common.storageclient').setLevel(logging.CRITICAL)
 logger = logging.getLogger(__name__)
-
 
 class AzureBlobStorageBackend:
 
@@ -15,8 +15,9 @@ class AzureBlobStorageBackend:
 
     def get_client(self):
         """
-        Get ibm_boto3 client.
-        :return: ibm_boto3 client
+        Get Azure BlockBlobService client.
+        :return: storage client
+        :rtype: azure.storage.blob.BlockBlobService
         """
         return self.blob_client
 
@@ -30,6 +31,7 @@ class AzureBlobStorageBackend:
         """
         if isinstance(data, str):
             data = data.encode()
+
         self.blob_client.create_blob_from_bytes(bucket_name, key, data)
 
     def get_object(self, bucket_name, key, stream=False, extra_get_args={}):
@@ -39,17 +41,21 @@ class AzureBlobStorageBackend:
         :return: Data of the object
         :rtype: str/bytes
         """
-        if 'Range' in extra_get_args:
+        if 'Range' in extra_get_args:   # expected common format: Range='bytes=L-H'
             bytes_range = extra_get_args.pop('Range')[6:]
             bytes_range = bytes_range.split('-')
             extra_get_args['start_range'] = int(bytes_range[0])
             extra_get_args['end_range'] = int(bytes_range[1])
         try:
             if stream:
-                data = self.blob_client.get_blob_to_stream(bucket_name, key, **extra_get_args)
+                stream_out = BytesIO()
+                self.blob_client.get_blob_to_stream(bucket_name, key, stream_out, **extra_get_args)
+                stream_out.seek(0)
+                return stream_out
             else:
                 data = self.blob_client.get_blob_to_bytes(bucket_name, key, **extra_get_args)
-            return data.content
+                return data.content
+
         except AzureMissingResourceHttpError:
             raise StorageNoSuchKeyError(bucket_name, key)
 
@@ -63,7 +69,7 @@ class AzureBlobStorageBackend:
         """
         blob = self.blob_client.get_blob_properties(bucket_name, key)
 
-        ### adapted to match ibm_cos method
+        # adapted to match ibm_cos method
         metadata = {}
         metadata['content-length'] = blob.properties.content_length
         return metadata
@@ -74,7 +80,11 @@ class AzureBlobStorageBackend:
         :param bucket: bucket name
         :param key: data key
         """
-        self.blob_client.delete_blob(bucket_name, key)
+        try:
+            self.blob_client.delete_blob(bucket_name, key)
+        except AzureMissingResourceHttpError:
+            pass
+            #raise StorageNoSuchKeyError(bucket_name, key)
 
     def delete_objects(self, bucket_name, key_list):
         """
@@ -87,21 +97,19 @@ class AzureBlobStorageBackend:
 
     def head_bucket(self, bucket_name):
         """
-        Head bucket from COS with a name. Throws StorageNoSuchKeyError if the given bucket does not exist.
-        :param bucket_name: name of the bucket
+        Head container from COS with a name. Throws StorageNoSuchKeyError if the given container does not exist.
+        :param bucket_name: name of the container
+        :return: Data of the object
         """
         try:
-           self.blob_client.get_container_metadata(bucket_name)
-           return True
+           return self.blob_client.get_container_metadata(bucket_name)
         except Exception:
            raise StorageNoSuchKeyError(bucket_name, '')
 
     def bucket_exists(self, bucket_name):
         """
-        Head bucket from COS with a name. Throws StorageNoSuchKeyError if the given bucket does not exist.
-        :param bucket_name: name of the bucket
-        :return: Data of the object
-        :rtype: str/bytes
+        Returns True if container exists in storage. Throws StorageNoSuchKeyError if the given container does not exist.
+        :param bucket_name: name of the container
         """
         try:
            self.blob_client.get_container_metadata(bucket_name)
@@ -117,7 +125,7 @@ class AzureBlobStorageBackend:
         :return: List of objects in bucket that match the given prefix.
         :rtype: list of str
         """
-        ### adapted to match ibm_cos method
+        # adapted to match ibm_cos method
         try:
             blobs = self.blob_client.list_blobs(bucket_name, prefix)
             mod_list = []
@@ -126,8 +134,9 @@ class AzureBlobStorageBackend:
                     'Key' : blob.name,
                     'Size' : blob.properties.content_length
                 })
+            return mod_list
         except Exception:
-            StorageNoSuchKeyError(bucket_name, '' if prefix is None else prefix)
+            raise StorageNoSuchKeyError(bucket_name, '' if prefix is None else prefix)
 
     def list_keys(self, bucket_name, prefix=None):
         """
@@ -138,6 +147,6 @@ class AzureBlobStorageBackend:
         """
         try:
             keys = [key for key in self.blob_client.list_blob_names(bucket_name, prefix).items]
+            return keys
         except Exception:
-            StorageNoSuchKeyError(bucket_name, '' if prefix is None else prefix)
-        return keys
+            raise StorageNoSuchKeyError(bucket_name, '' if prefix is None else prefix)

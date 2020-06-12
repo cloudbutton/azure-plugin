@@ -15,13 +15,14 @@
 #
 
 
-import logging
+import os
 import json
+import logging
 import azure.functions as func
-from pywren_ibm_cloud.version import __version__
-from pywren_ibm_cloud.config import cloud_logging_config
-from pywren_ibm_cloud.function import function_handler
-from pywren_ibm_cloud.function import function_invoker
+from cloudbutton.version import __version__
+from cloudbutton.config import cloud_logging_config
+from cloudbutton.engine.agent import function_handler
+from cloudbutton.engine.agent import function_invoker
 
 cloud_logging_config(logging.INFO)
 logger = logging.getLogger('__main__')
@@ -33,9 +34,12 @@ def main(msgIn: func.QueueMessage):
     except:        
         args = msgIn.get_json()
 
+    os.environ['__PW_ACTIVATION_ID'] = os.environ['__OW_ACTIVATION_ID']
     if 'remote_invoker' in args:
-        logger.info("PyWren v{} - Starting invoker".format(__version__))
+        logger.info("Cloudbutton v{} - Starting invoker".format(__version__))
         function_invoker(args)
     else:
-        logger.info("PyWren v{} - Starting execution".format(__version__))
+        logger.info("Cloudbutton v{} - Starting execution".format(__version__))
         function_handler(args)
+
+    return {"Execution": "Finished"}

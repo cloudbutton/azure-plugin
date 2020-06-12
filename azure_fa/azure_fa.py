@@ -10,12 +10,12 @@ import re
 import subprocess as sp
 import uuid
 from . import config as azure_fa_config
-from pywren_ibm_cloud.utils import version_str
-from pywren_ibm_cloud.version import __version__
-from pywren_ibm_cloud.libs.azure.functionapps_client import FunctionAppClient
+from cloudbutton.engine.utils import version_str
+from cloudbutton.version import __version__
+from .functionapps_client import FunctionAppClient
 from azure.storage.queue import QueueService
 from azure.storage.queue.models import QueueMessageFormat
-import pywren_ibm_cloud
+import cloudbutton
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ class AzureFunctionAppBackend:
     """
 
     def __init__(self, config):
-        self.log_level = os.getenv('PYWREN_LOGLEVEL')
+        self.log_level = os.getenv('CLOUDBUTTON_LOGLEVEL')
         self.name = 'azure_fa'
         self.config = config
 
@@ -36,7 +36,7 @@ class AzureFunctionAppBackend:
         self.queue_service.decode_function = QueueMessageFormat.text_base64decode
 
 
-        log_msg = 'PyWren v{} init for Azure Function Apps'.format(__version__)
+        log_msg = 'Cloudbutton v{} init for Azure Function Apps'.format(__version__)
         logger.info(log_msg)
         if not self.log_level:
             print(log_msg)
@@ -48,7 +48,7 @@ class AzureFunctionAppBackend:
         from the provided Linux image for consumption plan
         """
 
-        log_msg = 'Creating new PyWren runtime for Azure Function Apps'
+        log_msg = 'Creating new Cloudbutton runtime for Azure Function Apps...'
         logger.info(log_msg)
         if not self.log_level:
             print(log_msg)
@@ -56,7 +56,7 @@ class AzureFunctionAppBackend:
         logger.info('Extracting preinstalls for Azure runtime')
         metadata = self._generate_runtime_meta()
 
-        logger.info('Creating new PyWren runtime')
+        logger.info('Creating new Cloudbutton runtime')
         action_name = self._format_action_name(docker_image_name)
         self._create_runtime(action_name)
 
@@ -81,43 +81,21 @@ class AzureFunctionAppBackend:
         """
         Invoke function
         """        
-        exec_id = payload['executor_id']
-        job_id = payload['job_id']
-        call_id = payload['call_id']
         action_name = self._format_action_name(docker_image_name)
         queue_name = self._format_queue_name(action_name, type='trigger')
-        start = time.time()
         
         try:
             msg = self.queue_service.put_message(queue_name, json.dumps(payload))
             activation_id = msg.id
-            roundtrip = time.time() - start
-            resp_time = format(round(roundtrip, 3), '.3f')
 
-            if activation_id is None:
-                log_msg = ('ExecutorID {} | JobID {} - Function {} invocation failed'.format(exec_id, job_id, call_id))
-                logger.debug(log_msg)
-            else:
-                log_msg = ('ExecutorID {} | JobID {} - Function {} invocation done! ({}s) - Activation ID: '
-                        '{}'.format(exec_id, job_id, call_id, resp_time, activation_id))
-                logger.debug(log_msg)
         except Exception:
             logger.debug('Creating queue (invoke)')
             self.queue_service.create_queue(queue_name)
             return self.invoke(docker_image_name, memory=memory, payload=payload)
 
         return activation_id
-    
-
-    def invoke_with_result(self, docker_image_name, memory=None, payload={}):
-        """
-        Not doable on this implementation, which uses queues as a trigger to the function,
-        and no response is expected after the call.
-        """
-        raise Exception('Cannot invoke_with_result() on this current '
-                        'Azure Function App as a backend implementation')
-
                         
+
     def get_runtime_key(self, docker_image_name, runtime_memory):
         """
         Method that creates and returns the runtime key.
@@ -148,14 +126,14 @@ class AzureFunctionAppBackend:
 
 
     def _format_queue_name(self, action_name, type):
-        #  Using different queue names because there's a delay between deleting a queue   
-        #  and creating another one with the same name
+        #  Using different queue names because there is a delay between
+        #  deleting a queue and creating another one with the same name
         return action_name + '-' + type
 
 
     def _create_runtime(self, action_name, extract_preinstalls=False):
         """
-        Creates a new runtime with the base modules and pywren-ibm-cloud
+        Creates a new runtime with the base modules and cloudbutton
         """
 
         def add_base_modules():
@@ -163,22 +141,22 @@ class AzureFunctionAppBackend:
             child = sp.Popen(cmd, shell=True, stdout=sp.PIPE, stderr=sp.PIPE) # silent
             child.wait()
             logger.debug(child.stdout.read().decode())
-            logger.error(child.stderr.read().decode())
+            logger.debug(child.stderr.read().decode())
 
             if child.returncode != 0:
                 cmd = 'pip install -t {} -r requirements.txt'.format(azure_fa_config.ACTION_MODULES_DIR)
                 child = sp.Popen(cmd, shell=True, stdout=sp.PIPE, stderr=sp.PIPE) # silent
                 child.wait()
                 logger.debug(child.stdout.read().decode())
-                logger.error(child.stderr.read().decode())
+                logger.debug(child.stderr.read().decode())
 
                 if child.returncode != 0:
-                    logger.critical('Failed to install base modules')
+                    logger.critical('Failed to install base modules for Azure Function')
                     exit(1)
 
-        def add_pywren_module(action_name):
-            module_location = os.path.dirname(os.path.abspath(pywren_ibm_cloud.__file__))
-            shutil.copytree(module_location, os.path.join(azure_fa_config.ACTION_MODULES_DIR, 'pywren_ibm_cloud'))
+        def add_cloudbutton_module():
+            module_location = os.path.dirname(os.path.abspath(cloudbutton.__file__))
+            shutil.copytree(module_location, os.path.join(azure_fa_config.ACTION_MODULES_DIR, 'cloudbutton'))
 
         def get_bindings_str(action_name, extract_preinstalls=False):
             if not extract_preinstalls:
@@ -221,20 +199,21 @@ class AzureFunctionAppBackend:
         os.chdir(temp_folder)
 
         try:
-            project_dir = os.path.join(initial_dir, temp_folder, action_name)
-            action_dir = os.path.join(project_dir, action_name)
 
             # Create project folder from template
             project_template = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'action')
+            project_dir = os.path.join(initial_dir, temp_folder, action_name)
             shutil.copytree(project_template, project_dir)
+            
             os.chdir(project_dir)
+            action_dir = os.path.join(project_dir, action_name)
             os.rename('action', action_dir)
             
-            # Add the base dependencies and current pywren module
+            # Add the base dependencies and current cloudbutton module
             logger.debug('Adding runtime base modules')
             os.makedirs(azure_fa_config.ACTION_MODULES_DIR, exist_ok=True)
             add_base_modules()
-            add_pywren_module(action_name)
+            add_cloudbutton_module()
 
             # Set entry point file
             if extract_preinstalls:
@@ -269,10 +248,10 @@ class AzureFunctionAppBackend:
         Extract installed Python modules from Azure runtime
         """
         
-        action_name = 'pywren-extract-preinstalls-' + get_unique_id()
+        action_name = 'cloudbutton-extract-preinstalls-' + get_unique_id()
         self._create_runtime(action_name, extract_preinstalls=True)
 
-        logger.info("Invoking 'extract-preinstalls' action")
+        logger.debug("Invoking 'extract-preinstalls' action")
         try:
             runtime_meta = self._invoke_with_result(action_name)
         except Exception:
@@ -285,7 +264,7 @@ class AzureFunctionAppBackend:
         if not runtime_meta or 'preinstalls' not in runtime_meta:
             raise Exception(runtime_meta)
 
-        logger.info("Extracted metadata succesfully")
+        logger.debug("Extracted metadata succesfully")
         return runtime_meta
 
 
