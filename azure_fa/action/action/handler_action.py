@@ -34,7 +34,7 @@ def main(msgIn: func.QueueMessage):
     except:        
         args = msgIn.get_json()
 
-    os.environ['__PW_ACTIVATION_ID'] = os.environ['__OW_ACTIVATION_ID']
+    os.environ['__PW_ACTIVATION_ID'] = str(msgIn.id)
     if 'remote_invoker' in args:
         logger.info("Cloudbutton v{} - Starting invoker".format(__version__))
         function_invoker(args)
