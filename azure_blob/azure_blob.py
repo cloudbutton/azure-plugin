@@ -55,7 +55,6 @@ class AzureBlobStorageBackend:
             else:
                 data = self.blob_client.get_blob_to_bytes(bucket_name, key, **extra_get_args)
                 return data.content
-
         except AzureMissingResourceHttpError:
             raise StorageNoSuchKeyError(bucket_name, key)
 
