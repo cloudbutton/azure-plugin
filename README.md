@@ -39,7 +39,7 @@ Assuming you already have installed Cloudbutton:
    - `account_name`: the name of the Storage Account itself.
    - `account_key`: an Account Key, found in *Storage Account* > `account_name` > *Settings* > *Access Keys*.
    - `resource_group`: the Resource Group of your Storage Account. *Storage Account* > `account_name` > *Overview*.
-   - `locatoin`: the location of the consumption plan for the runtime. \
+   - `location`: the location of the consumption plan for the runtime. \
       Use `az functionapp list-consumption-locations` to view available locations.
    - `functions_version`: optional, the Azure Functions runtime version (2 or 3, defaults to 2).
       
