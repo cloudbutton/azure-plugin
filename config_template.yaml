@@ -1,4 +1,4 @@
-pywren: 
+cloudbutton: 
     storage_bucket: <CONTAINER_NAME>
     storage_backend: azure_blob
     compute_backend: azure_fa
@@ -17,6 +17,3 @@ azure_fa:
     account_name : <STORAGE_ACCOUNT_NAME>
     account_key  : <STORAGE_ACCOUNT_KEY>
     #functions_version : <AZURE_FUNCTIONS_VERSION>  # default = 2.0
-
-#rabbitmq:
-    #amqp_url 	: <RABBIT_AMQP_URL>  # amqp://
