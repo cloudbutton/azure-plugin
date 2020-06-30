@@ -1,12 +1,28 @@
-import cloudbutton.engine.backends as cb_backends
+#
+# Copyright Cloudlab URV 2020
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+import pywren_ibm_cloud
 import os
 import shutil
 
 
-storage_backends_dir = os.path.dirname(os.path.abspath(cb_backends.storage.__file__))
-compute_backends_dir = os.path.dirname(os.path.abspath(cb_backends.compute.__file__))
-dst_storage_backend_path = os.path.join(storage_backends_dir, 'azure_blob')
-dst_compute_backend_path = os.path.join(compute_backends_dir, 'azure_fa')
+storage_backends_dir = os.path.dirname(os.path.abspath(pywren_ibm_cloud.storage.__file__))
+compute_backends_dir = os.path.dirname(os.path.abspath(pywren_ibm_cloud.compute.__file__))
+dst_storage_backend_path = os.path.join(storage_backends_dir, 'backends', 'azure_blob')
+dst_compute_backend_path = os.path.join(compute_backends_dir, 'backends', 'azure_fa')
 
 if os.path.isdir(dst_storage_backend_path):
     shutil.rmtree(dst_storage_backend_path)

@@ -1,3 +1,19 @@
+#
+# Copyright Cloudlab URV 2020
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
 import os
 import sys
 import logging
@@ -9,13 +25,16 @@ import json
 import re
 import subprocess as sp
 import uuid
-from . import config as azure_fa_config
-from cloudbutton.engine.utils import version_str
-from cloudbutton.version import __version__
-from .functionapps_client import FunctionAppClient
+
 from azure.storage.queue import QueueService
 from azure.storage.queue.models import QueueMessageFormat
-import cloudbutton
+
+import pywren_ibm_cloud
+from pywren_ibm_cloud.utils import version_str
+from pywren_ibm_cloud.version import __version__
+from .functionapps_client import FunctionAppClient
+from . import config as azure_fa_config
+
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +55,7 @@ class AzureFunctionAppBackend:
         self.queue_service.decode_function = QueueMessageFormat.text_base64decode
 
 
-        log_msg = 'Cloudbutton v{} init for Azure Function Apps'.format(__version__)
+        log_msg = 'Pywren v{} init for Azure Function Apps'.format(__version__)
         logger.info(log_msg)
         if not self.log_level:
             print(log_msg)
@@ -48,7 +67,7 @@ class AzureFunctionAppBackend:
         from the provided Linux image for consumption plan
         """
 
-        log_msg = 'Creating new Cloudbutton runtime for Azure Function Apps...'
+        log_msg = 'Creating new Pywren runtime for Azure Function Apps...'
         logger.info(log_msg)
         if not self.log_level:
             print(log_msg)
@@ -56,7 +75,7 @@ class AzureFunctionAppBackend:
         logger.info('Extracting preinstalls for Azure runtime')
         metadata = self._generate_runtime_meta()
 
-        logger.info('Creating new Cloudbutton runtime')
+        logger.info('Creating new Pywren runtime')
         action_name = self._format_action_name(docker_image_name)
         self._create_runtime(action_name)
 
@@ -133,7 +152,7 @@ class AzureFunctionAppBackend:
 
     def _create_runtime(self, action_name, extract_preinstalls=False):
         """
-        Creates a new runtime with the base modules and cloudbutton
+        Creates a new runtime with the base modules and pywren
         """
 
         def add_base_modules():
@@ -154,9 +173,9 @@ class AzureFunctionAppBackend:
                     logger.critical('Failed to install base modules for Azure Function')
                     exit(1)
 
-        def add_cloudbutton_module():
-            module_location = os.path.dirname(os.path.abspath(cloudbutton.__file__))
-            shutil.copytree(module_location, os.path.join(azure_fa_config.ACTION_MODULES_DIR, 'cloudbutton'))
+        def add_pywren_module():
+            module_location = os.path.dirname(os.path.abspath(pywren_ibm_cloud.__file__))
+            shutil.copytree(module_location, os.path.join(azure_fa_config.ACTION_MODULES_DIR, 'pywren_ibm_cloud'))
 
         def get_bindings_str(action_name, extract_preinstalls=False):
             if not extract_preinstalls:
@@ -209,11 +228,11 @@ class AzureFunctionAppBackend:
             action_dir = os.path.join(project_dir, action_name)
             os.rename('action', action_dir)
             
-            # Add the base dependencies and current cloudbutton module
+            # Add the base dependencies and current pywren module
             logger.debug('Adding runtime base modules')
             os.makedirs(azure_fa_config.ACTION_MODULES_DIR, exist_ok=True)
             add_base_modules()
-            add_cloudbutton_module()
+            add_pywren_module()
 
             # Set entry point file
             if extract_preinstalls:
@@ -248,7 +267,7 @@ class AzureFunctionAppBackend:
         Extract installed Python modules from Azure runtime
         """
         
-        action_name = 'cloudbutton-extract-preinstalls-' + get_unique_id()
+        action_name = 'pywren-extract-preinstalls-' + get_unique_id()
         self._create_runtime(action_name, extract_preinstalls=True)
 
         logger.debug("Invoking 'extract-preinstalls' action")

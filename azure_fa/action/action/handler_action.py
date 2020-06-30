@@ -1,5 +1,5 @@
 #
-# (C) Copyright IBM Corp. 2018
+# Copyright Cloudlab URV 2020
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,15 +14,14 @@
 # limitations under the License.
 #
 
-
 import os
 import json
 import logging
 import azure.functions as func
-from cloudbutton.version import __version__
-from cloudbutton.config import cloud_logging_config
-from cloudbutton.engine.agent import function_handler
-from cloudbutton.engine.agent import function_invoker
+from pywren_ibm_cloud.version import __version__
+from pywren_ibm_cloud.config import cloud_logging_config
+from pywren_ibm_cloud.function import function_handler
+from pywren_ibm_cloud.function import function_invoker
 
 cloud_logging_config(logging.INFO)
 logger = logging.getLogger('__main__')
@@ -36,10 +35,10 @@ def main(msgIn: func.QueueMessage):
 
     os.environ['__PW_ACTIVATION_ID'] = str(msgIn.id)
     if 'remote_invoker' in args:
-        logger.info("Cloudbutton v{} - Starting invoker".format(__version__))
+        logger.info("Pywren v{} - Starting invoker".format(__version__))
         function_invoker(args)
     else:
-        logger.info("Cloudbutton v{} - Starting execution".format(__version__))
+        logger.info("Pywren v{} - Starting execution".format(__version__))
         function_handler(args)
 
     return {"Execution": "Finished"}

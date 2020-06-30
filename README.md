@@ -1,8 +1,8 @@
-# CloudButton Microsoft Azure Plugin
-Cloudbutton toolkit plugin for Azure Function Apps and Azure Blob Storage.
+# IBM-Pywren Microsoft Azure Plugin
+IBM-Pywren plugin for Azure Function Apps and Azure Blob Storage.
 
 - CloudButton Project: [http://cloudbutton.eu](http://cloudbutton.eu)
-- CloudButton Toolkit: [https://github.com/cloudbutton/cloudbutton](https://github.com/cloudbutton/cloudbutton)
+- IBM Pywren: [https://github.com/pywren/pywren-ibm-cloud](https://github.com/pywren/pywren-ibm-cloud)
 
 ## Requirements
 
@@ -13,15 +13,15 @@ Cloudbutton toolkit plugin for Azure Function Apps and Azure Blob Storage.
  
 ## Plugin setup
 
-If you did not install `cloudbutton` yet, you first have to [install](https://github.com/cloudbutton/cloudbutton) it.\
-Assuming you already have installed Cloudbutton:
+If you did not install `pywren_ibm_cloud` yet, you first have to [install](https://github.com/pywren/pywren-ibm-cloud) it.\
+Assuming you already have installed IBM-Pywren:
 
   1. Clone this repository.
   2. Execute the `install_plugin.py` script. 
 ```
   python3 install_plugin.py
 ```
-  3. Edit your local Cloudbutton config file (typically ~/.cloudbutton_config)
+  3. Edit your local Pywren config file (typically ~/.pywren_config)
      with the new parameters for Azure.\
      See [config_tempate.yaml](/config_template.yaml)
 ```yaml
@@ -43,9 +43,9 @@ Assuming you already have installed Cloudbutton:
       Use `az functionapp list-consumption-locations` to view available locations.
    - `functions_version`: optional, the Azure Functions runtime version (2 or 3, defaults to 2).
       
-      In addition, you have to specify the container that will be used internally by Cloudbutton, and you have set that you want Cloudbutton to use Azure Storage / Functions:     
+      In addition, you have to specify the container that will be used internally by Pywren, and you have set that you want Pywren to use Azure Storage / Functions:     
 ```yaml
-  cloudbutton:
+  pywren:
     storage_bucket: <CONTAINER_NAME>
     storage_backend : azure_blob
     compute_backend : azure_fa
@@ -54,6 +54,6 @@ Assuming you already have installed Cloudbutton:
 ```
   az login
 ```
-  5. Use Cloudbutton toolkit in your Python code.
+  5. Use IBM-Pywren in your Python code.
   
 Note: the first time executing it will take several minutes to deploy the runtime. If you want to see more information about the process, you can set the log level to 'INFO'.
