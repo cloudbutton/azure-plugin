@@ -30,7 +30,6 @@ from azure.storage.queue import QueueService
 from azure.storage.queue.models import QueueMessageFormat
 
 import pywren_ibm_cloud
-from pywren_ibm_cloud.utils import version_str
 from pywren_ibm_cloud.version import __version__
 from .functionapps_client import FunctionAppClient
 from . import config as azure_fa_config
@@ -44,7 +43,7 @@ class AzureFunctionAppBackend:
     """
 
     def __init__(self, config):
-        self.log_level = os.getenv('CLOUDBUTTON_LOGLEVEL')
+        self.log_active = logger.getEffectiveLevel() != logging.WARNING
         self.name = 'azure_fa'
         self.config = config
 
@@ -57,7 +56,7 @@ class AzureFunctionAppBackend:
 
         log_msg = 'Pywren v{} init for Azure Function Apps'.format(__version__)
         logger.info(log_msg)
-        if not self.log_level:
+        if not self.log_active:
             print(log_msg)
 
 
@@ -66,11 +65,7 @@ class AzureFunctionAppBackend:
         Creates a new runtime into Azure Function Apps 
         from the provided Linux image for consumption plan
         """
-
-        log_msg = 'Creating new Pywren runtime for Azure Function Apps...'
-        logger.info(log_msg)
-        if not self.log_level:
-            print(log_msg)
+        logger.info('Creating new Pywren runtime for Azure Function Apps...')
 
         logger.info('Extracting preinstalls for Azure runtime')
         metadata = self._generate_runtime_meta()
@@ -95,11 +90,10 @@ class AzureFunctionAppBackend:
         queue_name = self._format_queue_name(docker_image_name, type='trigger')
         self.queue_service.delete_queue(queue_name)
 
-
     def invoke(self, docker_image_name, memory=None, payload={}):
         """
         Invoke function
-        """        
+        """
         action_name = self._format_action_name(docker_image_name)
         queue_name = self._format_queue_name(action_name, type='trigger')
         
@@ -113,7 +107,6 @@ class AzureFunctionAppBackend:
             return self.invoke(docker_image_name, memory=memory, payload=payload)
 
         return activation_id
-                        
 
     def get_runtime_key(self, docker_image_name, runtime_memory):
         """
@@ -125,7 +118,6 @@ class AzureFunctionAppBackend:
         runtime_key = os.path.join(self.name, action_name)
 
         return runtime_key
-
 
     def _format_action_name(self, action_name):
         sha_1 = hashlib.sha1()
@@ -143,12 +135,10 @@ class AzureFunctionAppBackend:
 
         return action_name
 
-
     def _format_queue_name(self, action_name, type):
         #  Using different queue names because there is a delay between
         #  deleting a queue and creating another one with the same name
         return action_name + '-' + type
-
 
     def _create_runtime(self, action_name, extract_preinstalls=False):
         """
@@ -260,7 +250,6 @@ class AzureFunctionAppBackend:
         finally: 
             os.chdir(initial_dir)
             shutil.rmtree(temp_folder, ignore_errors=True) # Remove tmp project folder
-        
 
     def _generate_runtime_meta(self):
         """
@@ -286,7 +275,6 @@ class AzureFunctionAppBackend:
         logger.debug("Extracted metadata succesfully")
         return runtime_meta
 
-
     def _invoke_with_result(self, action_name):
         result_queue_name = self._format_queue_name(action_name, type='result')
         self.queue_service.create_queue(result_queue_name)
@@ -302,8 +290,6 @@ class AzureFunctionAppBackend:
         self.queue_service.delete_queue(result_queue_name)
         
         return json.loads(result_str)
-
     
 def get_unique_id():
     return str(uuid.uuid4()).replace('-', '')[:10]
-
