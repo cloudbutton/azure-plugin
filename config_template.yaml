@@ -2,10 +2,6 @@ cloudbutton:
     storage_bucket: <CONTAINER_NAME>
     storage_backend: azure_blob
     compute_backend: azure_fa
-    #rabbitmq_monitor: <True/False>
-    #remote_invoker: <True/False>
-    #data_cleaner: <True/False>
-    #workers: <MAX_NUM_OF_WORKERS>
 
 azure_blob:
     account_name : <STORAGE_ACCOUNT_NAME>
