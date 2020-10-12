@@ -1,8 +1,11 @@
-# IBM-Pywren Microsoft Azure Plugin
-IBM-Pywren plugin for Azure Function Apps and Azure Blob Storage.
+# This pluguin has been merged to the official [Lithops repo](https://github.com/lithops-cloud/lithops)
 
-- CloudButton Project: [http://cloudbutton.eu](http://cloudbutton.eu)
-- IBM Pywren: [https://github.com/pywren/pywren-ibm-cloud](https://github.com/pywren/pywren-ibm-cloud)
+-------
+
+# Lithops Microsoft Azure Plugin
+Lithops plugin for Azure Function Apps and Azure Blob Storage.
+
+- Lithops: [https://github.com/lithops-cloud/lithops](https://github.com/lithops-cloud/lithops)
 
 ## Requirements
 
